@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8' ?>
 
-<connector-plugin class='duckdb_jdbc' superclass='jdbc' plugin-version='1.1.0' name='DuckDB' version='18.1' min-version-tableau='2020.4'>
+<connector-plugin class='duckdb_jdbc' superclass='jdbc' plugin-version='1.1.1' name='DuckDB' version='18.1' min-version-tableau='2020.4'>
   <vendor-information>
       <company name="MotherDuck"/>
       <support-link url="https://github.com/MotherDuck-Open-Source/duckdb-tableau-connector"/>
@@ -27,6 +27,7 @@
       <customization name="CAP_SUPPORTS_SPLIT_FROM_RIGHT" value="yes"/>
       <customization name="CAP_SUPPORTS_UNION" value="yes"/>
       <customization name="CAP_QUERY_ALLOW_PARTIAL_AGGREGATION" value="no"/>
+      <customization name="CAP_JDBC_INCLUDE_CATALOG_NAME" value="yes"/>
     </customizations>
   </connection-customization>
   <connection-fields file='connectionFields.xml'/>
