@@ -16,12 +16,12 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
     - name: Checkout Taco
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         path: taco
 
     - name: Checkout SDK
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: tableau/connector-plugin-sdk
         path: sdk
@@ -44,14 +44,14 @@ jobs:
         popd
 
     - name: Upload Taco
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: duckdb_taco
         path: |
           sdk/connector-packager/packaged-connector/duckdb_jdbc*.taco
 
     - name: Upload Connector
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: duckdb_jdbc
         path: |
