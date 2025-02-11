@@ -27,6 +27,7 @@
       <customization name="CAP_SUPPORTS_SPLIT_FROM_RIGHT" value="yes"/>
       <customization name="CAP_SUPPORTS_UNION" value="yes"/>
       <customization name="CAP_QUERY_ALLOW_PARTIAL_AGGREGATION" value="no"/>
+      <customization name="CAP_JDBC_INCLUDE_CATALOG_NAME" value="yes"/>
     </customizations>
   </connection-customization>
   <connection-fields file='connectionFields.xml'/>
