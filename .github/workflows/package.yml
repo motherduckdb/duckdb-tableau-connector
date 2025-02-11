@@ -15,7 +15,7 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-    - name: Checkout Taco
+    - name: Checkout MotherDuck Tableau connector
       uses: actions/checkout@v4
       with:
         path: taco
@@ -26,6 +26,11 @@ jobs:
         repository: tableau/connector-plugin-sdk
         path: sdk
     
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+
     - name: Create Virtual Environment
       shell: bash
       run: |
