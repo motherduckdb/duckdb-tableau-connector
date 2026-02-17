@@ -2,18 +2,13 @@
 
 name: Package DuckDB Taco
 
-# Controls when the action will run. Workflow runs when manually triggered using the UI
-# or API.
 on:
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   package:
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
     - name: Checkout MotherDuck Tableau connector
       uses: actions/checkout@v4
@@ -32,21 +27,16 @@ jobs:
         python-version: 3.11
 
     - name: Create Virtual Environment
-      shell: bash
-      run: |
-        pushd sdk
-        python -m venv .venv
-        popd
-      
+      working-directory: ./sdk
+      run: python -m venv .venv
+
     - name: Package Taco
-      shell: bash
+      working-directory: ./sdk
       run: |
-        pushd sdk
         source .venv/bin/activate
         cd connector-packager
         python setup.py install
         python -m connector_packager.package ../../taco/tableau_connectors/duckdb_jdbc
-        popd
 
     - name: Upload Taco
       uses: actions/upload-artifact@v4

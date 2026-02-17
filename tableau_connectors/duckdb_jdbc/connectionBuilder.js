@@ -10,7 +10,10 @@
             // if `md:` prefix is not already there, add it.
             connectionString = "md:" + connectionString;
         }
-
+        if (attr[connectionHelper.attributeTableauServerUser] && !connectionString.includes("session_hint=")) {
+            let delimiter = connectionString.includes("?") ? "&" : "?";  // In case there are query parameters already
+            connectionString = connectionString + delimiter + "session_hint=" + attr[connectionHelper.attributeTableauServerUser];
+        }
     } else if (attr[connectionHelper.attributeServer] === "memory") {
         connectionString = ":memory:";
     }
