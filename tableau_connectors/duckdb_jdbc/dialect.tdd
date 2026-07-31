@@ -26,12 +26,16 @@
       <argument type='date' />
       <argument type='int' />
     </function>
+    <!-- Tableau serial dates: fractional days since 1900-01-01, floored to the day for
+         DATE (TDVT setup.date.cast.num_to_date). INTERVAL (x) DAY truncates toward zero
+         in DuckDB, so go through seconds to keep the fraction and floor via the
+         timestamp-to-date cast. -->
     <function group='cast' name='DATE' return-type='date'>
-      <formula>date_trunc(&apos;day&apos;, CAST(&apos;1900-01-01&apos; AS DATE) + INTERVAL (%1) DAY)</formula>
+      <formula>CAST(CAST(&apos;1900-01-01&apos; AS TIMESTAMP) + INTERVAL (%1 * 86400) SECOND AS DATE)</formula>
       <argument type='real' />
     </function>
     <function group='cast' name='DATETIME' return-type='datetime'>
-      <formula>(CAST(&apos;1900-01-01 00:00:00&apos; AS TIMESTAMP) + INTERVAL (%1) DAY)</formula>
+      <formula>(CAST(&apos;1900-01-01&apos; AS TIMESTAMP) + INTERVAL (%1 * 86400) SECOND)</formula>
       <argument type='real' />
     </function>
     <function group='cast' name='DATETIME' return-type='datetime'>
