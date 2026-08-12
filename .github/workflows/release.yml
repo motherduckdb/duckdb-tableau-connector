@@ -3,6 +3,7 @@ name: Sign and attach Taco to release
 on:
   release:
     types: [published]
+  pull_request: # TESTING SCAFFOLD - revert before merge
 
 permissions:
   contents: read
@@ -21,8 +22,11 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
+        # TESTING SCAFFOLD - revert before merge. Pinned to the main commit
+        # that built v1.1.1, so the test does not race the PR's own packaging
+        # run and always signs a known-good artifact.
         run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow package.yml \
-          --commit "$GITHUB_SHA" --status success --limit 1 \
+          --commit 574c1e7b5d2e881698e49457c87a7230eb2dcf5c --status success --limit 1 \
           --json databaseId -q '.[0].databaseId')
         if [ -z "$run_id" ]; then
           echo "No successful package.yml run for $GITHUB_SHA."
@@ -34,7 +38,7 @@ jobs:
 
     - name: Check the packaged version matches the release tag
       env:
-        TAG: ${{ github.event.release.tag_name }}
+        TAG: ${{ github.event.release.tag_name || 'v1.1.1' }} # TESTING SCAFFOLD - revert before merge
       run: |
         taco=$(ls duckdb_jdbc-*.taco)
         if [ "$taco" != "duckdb_jdbc-${TAG}.taco" ]; then
@@ -91,11 +95,21 @@ jobs:
     - name: Verify signature
       run: jarsigner -verify "$TACO" | grep -q '^jar verified'
 
+    - name: Rename signed Taco
+      run: mv "$TACO" "${TACO%.taco}-signed.taco"
+
+    # TESTING SCAFFOLD - revert before merge. Replaces the release upload so a
+    # test run cannot clobber the asset on the published v1.1.1 release.
+    - name: Upload signed Taco
+      if: github.event_name == 'pull_request'
+      uses: actions/upload-artifact@v4
+      with:
+        name: duckdb_taco_signed
+        path: duckdb_jdbc-*-signed.taco
+
     - name: Attach signed Taco to the release
+      if: github.event_name == 'release'
       env:
         GH_TOKEN: ${{ github.token }}
         TAG: ${{ github.event.release.tag_name }}
-      run: |
-        signed="${TACO%.taco}-signed.taco"
-        mv "$TACO" "$signed"
-        gh release upload "$TAG" "$signed" --clobber
+      run: gh release upload "$TAG" "${TACO%.taco}-signed.taco" --clobber
