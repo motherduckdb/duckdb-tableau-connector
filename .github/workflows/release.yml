@@ -1,0 +1,101 @@
+name: Sign and attach Taco to release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+    # Sign the Taco that was already built for this commit rather than
+    # rebuilding it: the packager is checked out at HEAD, so a rebuild can
+    # differ from the artifact that was downloaded and tested against Tableau.
+    - name: Download the Taco built for this commit
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow package.yml \
+          --commit "$GITHUB_SHA" --status success --limit 1 \
+          --json databaseId -q '.[0].databaseId')
+        if [ -z "$run_id" ]; then
+          echo "No successful package.yml run for $GITHUB_SHA."
+          echo "Tag a commit on main, or re-run the packaging workflow for it."
+          echo "Artifacts are kept for 90 days; older runs need re-running."
+          exit 1
+        fi
+        gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name duckdb_taco
+
+    - name: Check the packaged version matches the release tag
+      env:
+        TAG: ${{ github.event.release.tag_name }}
+      run: |
+        taco=$(ls duckdb_jdbc-*.taco)
+        if [ "$taco" != "duckdb_jdbc-${TAG}.taco" ]; then
+          echo "Packaged $taco but the release is tagged ${TAG}."
+          echo "Bump plugin-version in manifest.xml to match the tag."
+          exit 1
+        fi
+        echo "TACO=$taco" >> "$GITHUB_ENV"
+
+    # jarsigner. Not preinstalled on every runner image, and the version it
+    # ships with decides the signature algorithm Tableau ends up verifying.
+    - name: Set up Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: 17
+
+    - name: Write the Software Trust Manager client certificate
+      env:
+        SM_CLIENT_CERT_FILE_B64: ${{ secrets.TABLEAU_SIGNING_SM_CLIENT_CERT_FILE }}
+      run: |
+        cert_path="$RUNNER_TEMP/Certificate_pkcs12.p12"
+        echo "$SM_CLIENT_CERT_FILE_B64" | base64 --decode > "$cert_path"
+        echo "SM_CLIENT_CERT_FILE=$cert_path" >> "$GITHUB_ENV"
+
+    # Installs smctl and the PKCS#11 library, and emits the config file that
+    # jarsigner needs. No `input` here: the action only knows how to sign
+    # native binaries itself, and signing a .taco (a JAR) goes through
+    # jarsigner, which smctl only reaches when given --config-file.
+    - name: Set up Software Trust Manager
+      id: stm
+      # Pinned: this is the only third party that sees the signing credentials.
+      uses: digicert/code-signing-software-trust-action@fae23a455ba4bde62b64fd7cb2f81ade788f5a95 # v1
+      env:
+        SM_HOST: ${{ secrets.TABLEAU_SIGNING_SM_HOST }}
+        SM_API_KEY: ${{ secrets.TABLEAU_SIGNING_SM_API_KEY }}
+        SM_CLIENT_CERT_FILE: ${{ env.SM_CLIENT_CERT_FILE }}
+        SM_CLIENT_CERT_PASSWORD: ${{ secrets.TABLEAU_SIGNING_SM_CLIENT_CERT_PASSWORD }}
+
+    - name: Sign Taco
+      env:
+        SM_HOST: ${{ secrets.TABLEAU_SIGNING_SM_HOST }}
+        SM_API_KEY: ${{ secrets.TABLEAU_SIGNING_SM_API_KEY }}
+        SM_CLIENT_CERT_FILE: ${{ env.SM_CLIENT_CERT_FILE }}
+        SM_CLIENT_CERT_PASSWORD: ${{ secrets.TABLEAU_SIGNING_SM_CLIENT_CERT_PASSWORD }}
+      run: |
+        smctl sign \
+          --keypair-alias "${{ secrets.TABLEAU_SIGNING_SM_KEYPAIR_ALIAS }}" \
+          --config-file "${{ steps.stm.outputs.PKCS11_CONFIG }}" \
+          --input "$TACO"
+
+    # Grep rather than exit code: `jarsigner -verify` exits 0 on an unsigned
+    # jar, so a silent no-op signing step would otherwise sail through.
+    - name: Verify signature
+      run: jarsigner -verify "$TACO" | grep -q '^jar verified'
+
+    - name: Attach signed Taco to the release
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ github.event.release.tag_name }}
+      run: |
+        signed="${TACO%.taco}-signed.taco"
+        mv "$TACO" "$signed"
+        gh release upload "$TAG" "$signed" --clobber

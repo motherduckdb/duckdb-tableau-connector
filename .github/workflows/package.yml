@@ -16,10 +16,13 @@ jobs:
       with:
         path: taco
 
+    # Pinned rather than tracking master: the packager runs `setup.py install`
+    # here, and its output is what gets signed and released.
     - name: Checkout SDK
       uses: actions/checkout@v4
       with:
         repository: tableau/connector-plugin-sdk
+        ref: 1f9571b2503c19e685b957da9b489d923c5fbb8a
         path: sdk
     
     - name: Set up Python
