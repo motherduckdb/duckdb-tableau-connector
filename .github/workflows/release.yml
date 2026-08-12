@@ -78,6 +78,28 @@ jobs:
         SM_CLIENT_CERT_FILE: ${{ env.SM_CLIENT_CERT_FILE }}
         SM_CLIENT_CERT_PASSWORD: ${{ secrets.TABLEAU_SIGNING_SM_CLIENT_CERT_PASSWORD }}
 
+    # TESTING SCAFFOLD - revert before merge. Lengths only, never values: a
+    # trailing newline pasted into a secret is invisible and yields a 401.
+    # A correct SM_HOST (https://clientauth.one.digicert.com) is 35 chars.
+    - name: Software Trust Manager healthcheck
+      env:
+        SM_HOST: ${{ secrets.TABLEAU_SIGNING_SM_HOST }}
+        SM_API_KEY: ${{ secrets.TABLEAU_SIGNING_SM_API_KEY }}
+        SM_CLIENT_CERT_FILE: ${{ env.SM_CLIENT_CERT_FILE }}
+        SM_CLIENT_CERT_PASSWORD: ${{ secrets.TABLEAU_SIGNING_SM_CLIENT_CERT_PASSWORD }}
+      run: |
+        echo "SM_HOST length:     $(printf %s "$SM_HOST" | wc -c) (expect 35)"
+        echo "SM_API_KEY length:  $(printf %s "$SM_API_KEY" | wc -c)"
+        echo "cert password len:  $(printf %s "$SM_CLIENT_CERT_PASSWORD" | wc -c)"
+        echo "p12 size:           $(stat -c%s "$SM_CLIENT_CERT_FILE") bytes"
+        if openssl pkcs12 -in "$SM_CLIENT_CERT_FILE" -nokeys -clcerts \
+             -passin pass:"$SM_CLIENT_CERT_PASSWORD" -out cert.pem 2>openssl.err; then
+          openssl x509 -in cert.pem -noout -subject -issuer -dates
+        else
+          echo "p12 could not be opened:"; cat openssl.err
+        fi
+        smctl healthcheck || true
+
     - name: Sign Taco
       env:
         SM_HOST: ${{ secrets.TABLEAU_SIGNING_SM_HOST }}
