@@ -86,16 +86,18 @@ Or, you can use it to perform fast analytics on a SQLite file.
 
 ## Releasing
 
-Don't create releases or tags from the GitHub UI. Bump `plugin-version` in
-`tableau_connectors/duckdb_jdbc/manifest.xml`, merge, then run the **Release** workflow
-(Actions → Release → Run workflow, or `gh workflow run release.yml -f sha=<commit>`):
+Don't create releases or tags from the GitHub UI, and don't bump versions in the repo: the manifest and the
+JDBC user agent carry `0.0.0`, and the Release workflow stamps the real version in when it packages. Run it from
+Actions → Release → Run workflow, or `gh workflow run release.yml -f version=1.2.0`:
 
 - `sha`: a `main` commit whose `Package DuckDB Taco` run is green (defaults to the latest).
-- `dry_run`: run every check and sign the Taco, upload it as a workflow artifact, then only print the release command.
+- `version`: without the `v`; a numeric suffix such as `1.2.0-1` marks a pre-release (Tableau's manifest
+  schema allows only digits after the dash).
+- `dry_run`: run every check, package and sign the Taco and upload it as a workflow artifact, then only print
+  the release command.
 
-The version is the manifest's `plugin-version`, which the packager bakes into the Taco's filename. The workflow
-fails if tag `v<version>` already exists or the commit has no green `main` build. Otherwise it downloads that
-build's Taco, signs it with the MotherDuck code-signing certificate through DigiCert Software Trust Manager,
-creates the tag on the commit and publishes the release with `duckdb_jdbc-v<version>-signed.taco` attached and
-auto-generated notes. `gh release create` publishes only after the asset is uploaded, so no release goes out
-without its Taco.
+The workflow fails if tag `v<version>` already exists or the commit has no green `main` build. Otherwise it
+packages the commit with the version stamped in, signs the Taco with the MotherDuck code-signing certificate
+through DigiCert Software Trust Manager, creates the tag on the commit and publishes the release with
+`duckdb_jdbc-v<version>-signed.taco` attached and auto-generated notes. `gh release create` publishes only after
+the asset is uploaded, so no release goes out without its Taco.
