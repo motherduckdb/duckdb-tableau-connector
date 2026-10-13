@@ -66,8 +66,7 @@ jobs:
 
     # Installs smctl and the PKCS#11 library, and emits the config file that
     # jarsigner needs. No `input` here: the action only knows how to sign
-    # native binaries itself, and signing a .taco (a JAR) goes through
-    # jarsigner, which smctl only reaches when given --config-file.
+    # native binaries itself; the .taco (a JAR) is signed by jarsigner below.
     - name: Set up Software Trust Manager
       id: stm
       # Pinned: this is the only third party that sees the signing credentials.
@@ -106,11 +105,14 @@ jobs:
         SM_API_KEY: ${{ secrets.TABLEAU_SIGNING_SM_API_KEY }}
         SM_CLIENT_CERT_FILE: ${{ env.SM_CLIENT_CERT_FILE }}
         SM_CLIENT_CERT_PASSWORD: ${{ secrets.TABLEAU_SIGNING_SM_CLIENT_CERT_PASSWORD }}
+      # jarsigner against the PKCS#11 config directly: `smctl sign` picks its
+      # tool by file extension and silently skips a .taco.
       run: |
-        smctl sign \
-          --keypair-alias "${{ secrets.TABLEAU_SIGNING_SM_KEYPAIR_ALIAS }}" \
-          --config-file "${{ steps.stm.outputs.PKCS11_CONFIG }}" \
-          --input "$TACO"
+        jarsigner -keystore NONE -storepass NONE -storetype PKCS11 -sigalg SHA256withRSA \
+          -providerClass sun.security.pkcs11.SunPKCS11 \
+          -providerArg "${{ steps.stm.outputs.PKCS11_CONFIG }}" \
+          -tsa http://timestamp.digicert.com \
+          "$TACO" "${{ secrets.TABLEAU_SIGNING_SM_KEYPAIR_ALIAS }}"
 
     # Grep rather than exit code: `jarsigner -verify` exits 0 on an unsigned
     # jar, so a silent no-op signing step would otherwise sail through.
