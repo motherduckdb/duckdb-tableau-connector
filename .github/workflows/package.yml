@@ -5,6 +5,15 @@ on:
   pull_request:
   push:
     branches: [main]
+  # The Release workflow packages here too, with the version stamped in.
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+      version:
+        type: string
+        required: true
 
 jobs:
   package:
@@ -14,7 +23,18 @@ jobs:
     - name: Checkout MotherDuck Tableau connector
       uses: actions/checkout@v4
       with:
+        ref: ${{ inputs.ref }}
         path: taco
+
+    # The repo carries 0.0.0; a real version exists only in a released Taco.
+    - name: Stamp the release version
+      if: inputs.version
+      working-directory: taco/tableau_connectors/duckdb_jdbc
+      env:
+        VERSION: ${{ inputs.version }}
+      run: |
+        sed -i "s/plugin-version='[^']*'/plugin-version='$VERSION'/" manifest.xml
+        sed -i "s/MOTHERDUCK_CONNECTOR_VERSION = '[^']*'/MOTHERDUCK_CONNECTOR_VERSION = '$VERSION'/" connectionProperties.js
 
     # Tableau shows the manifest version; the JDBC user agent reports the JS
     # constant. A Taco with the two out of sync is unidentifiable in logs.

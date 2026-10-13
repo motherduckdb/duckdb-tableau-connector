@@ -1,5 +1,5 @@
 (function propertiesbuilder(attr) {
-    const MOTHERDUCK_CONNECTOR_VERSION = '1.1.1';
+    const MOTHERDUCK_CONNECTOR_VERSION = '0.0.0';
 
     // These are the DBClientConfig properties
     var props = {};
