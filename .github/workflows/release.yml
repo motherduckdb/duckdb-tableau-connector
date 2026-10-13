@@ -1,0 +1,109 @@
+name: Release
+
+# The only way to cut a release: pick a main commit with a green package run.
+# The version is plugin-version in manifest.xml, which the packager bakes into
+# the Taco's filename, so there is no version input.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit on main to release (defaults to the latest)
+        default: main
+      dry_run:
+        description: Run all checks and sign the Taco, but don't create the release
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      SM_HOST: ${{ secrets.TABLEAU_SIGNING_SM_HOST }}
+      SM_API_KEY: ${{ secrets.TABLEAU_SIGNING_SM_API_KEY }}
+      SM_CLIENT_CERT_PASSWORD: ${{ secrets.TABLEAU_SIGNING_SM_CLIENT_CERT_PASSWORD }}
+    steps:
+      # A successful push run on main proves the commit is on main and packaged cleanly.
+      - name: Download the Taco from the green main build
+        run: |
+          sha=$(gh api "repos/$GH_REPO/commits/${{ inputs.sha }}" -q .sha)
+          echo "SHA=$sha" >> "$GITHUB_ENV"
+          run_id=$(gh run list --workflow package.yml --branch main --event push --commit "$sha" --status success \
+            --json databaseId -q '.[0].databaseId')
+          [ -n "$run_id" ] || { echo "::error::No successful main package run for $sha"; exit 1; }
+          gh run download "$run_id" -n duckdb_taco
+
+      - name: Validate version
+        run: |
+          taco=$(ls duckdb_jdbc-*.taco)
+          version=${taco#duckdb_jdbc-v}; version=${version%.taco}
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] \
+            || { echo "::error::Invalid plugin-version '$version' in manifest.xml"; exit 1; }
+          if gh api "repos/$GH_REPO/git/ref/tags/v$version" --silent 2>/dev/null; then
+            echo "::error::Tag v$version already exists; bump plugin-version in manifest.xml"; exit 1
+          fi
+          echo "TACO=$taco" >> "$GITHUB_ENV"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      # jarsigner. Not preinstalled on every runner image, and the version it
+      # ships with decides the signature algorithm Tableau ends up verifying.
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Write the Software Trust Manager client certificate
+        env:
+          SM_CLIENT_CERT_FILE_B64: ${{ secrets.TABLEAU_SIGNING_SM_CLIENT_CERT_FILE }}
+        run: |
+          cert_path="$RUNNER_TEMP/Certificate_pkcs12.p12"
+          echo "$SM_CLIENT_CERT_FILE_B64" | base64 --decode > "$cert_path"
+          echo "SM_CLIENT_CERT_FILE=$cert_path" >> "$GITHUB_ENV"
+
+      # Installs the PKCS#11 library and emits the config file jarsigner needs.
+      # No `input` here: the action only knows how to sign native binaries
+      # itself; the .taco (a JAR) is signed by jarsigner below.
+      - name: Set up Software Trust Manager
+        id: stm
+        # Pinned: this is the only third party that sees the signing credentials.
+        uses: digicert/code-signing-software-trust-action@fae23a455ba4bde62b64fd7cb2f81ade788f5a95 # v1
+
+      # jarsigner against the PKCS#11 config directly: `smctl sign` picks its
+      # tool by file extension and silently skips a .taco.
+      - name: Sign Taco
+        run: |
+          signed="${TACO%.taco}-signed.taco"
+          jarsigner -keystore NONE -storepass NONE -storetype PKCS11 -sigalg SHA256withRSA \
+            -providerClass sun.security.pkcs11.SunPKCS11 \
+            -providerArg "${{ steps.stm.outputs.PKCS11_CONFIG }}" \
+            -tsa http://timestamp.digicert.com \
+            -signedjar "$signed" "$TACO" "${{ secrets.TABLEAU_SIGNING_SM_KEYPAIR_ALIAS }}"
+          echo "TACO=$signed" >> "$GITHUB_ENV"
+
+      # Grep rather than exit code: `jarsigner -verify` exits 0 on an unsigned
+      # jar, so a silent no-op signing step would otherwise sail through.
+      - name: Verify signature
+        run: jarsigner -verify "$TACO" | grep -q '^jar verified'
+
+      # The dry run's output, to try in Tableau before cutting the release.
+      - name: Upload signed Taco
+        if: inputs.dry_run
+        uses: actions/upload-artifact@v4
+        with:
+          name: duckdb_taco_signed
+          path: ${{ env.TACO }}
+
+      # With assets, gh publishes only after they're uploaded and deletes the draft if uploading fails.
+      - name: Create release
+        run: |
+          prerelease=$([[ "$VERSION" == *-* ]] && echo --prerelease || true)
+          ${{ inputs.dry_run && 'echo [dry run]' || '' }} gh release create "v$VERSION" "$TACO" \
+            --target "$SHA" --title "v$VERSION" --generate-notes $prerelease

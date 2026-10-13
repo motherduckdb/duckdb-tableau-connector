@@ -16,10 +16,23 @@ jobs:
       with:
         path: taco
 
+    # Tableau shows the manifest version; the JDBC user agent reports the JS
+    # constant. A Taco with the two out of sync is unidentifiable in logs.
+    - name: Check the user-agent version matches the manifest
+      working-directory: taco/tableau_connectors/duckdb_jdbc
+      run: |
+        manifest=$(grep -o "plugin-version='[^']*'" manifest.xml | cut -d"'" -f2)
+        js=$(grep -o "MOTHERDUCK_CONNECTOR_VERSION = '[^']*'" connectionProperties.js | cut -d"'" -f2)
+        [ -n "$manifest" ] && [ "$manifest" = "$js" ] \
+          || { echo "::error::manifest.xml plugin-version '$manifest' != connectionProperties.js MOTHERDUCK_CONNECTOR_VERSION '$js'"; exit 1; }
+
+    # Pinned rather than tracking master: the packager runs `setup.py install`
+    # here, and its output is what gets signed and released.
     - name: Checkout SDK
       uses: actions/checkout@v4
       with:
         repository: tableau/connector-plugin-sdk
+        ref: 1f9571b2503c19e685b957da9b489d923c5fbb8a
         path: sdk
     
     - name: Set up Python
@@ -45,6 +58,8 @@ jobs:
         name: duckdb_taco
         path: |
           sdk/connector-packager/packaged-connector/duckdb_jdbc*.taco
+        # The packager exits 0 on validation failures; the missing Taco is the signal.
+        if-no-files-found: error
 
     - name: Upload Connector
       uses: actions/upload-artifact@v4
