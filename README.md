@@ -91,7 +91,8 @@ JDBC user agent carry `0.0.0`, and the Release workflow stamps the real version 
 Actions → Release → Run workflow, or `gh workflow run release.yml -f version=1.2.0`:
 
 - `sha`: a `main` commit whose `Package DuckDB Taco` run is green (defaults to the latest).
-- `version`: without the `v`; a suffix such as `1.2.0-rc1` marks a pre-release.
+- `version`: without the `v`; a numeric suffix such as `1.2.0-1` marks a pre-release (Tableau's manifest
+  schema allows only digits after the dash).
 - `dry_run`: run every check, package and sign the Taco and upload it as a workflow artifact, then only print
   the release command.
 
