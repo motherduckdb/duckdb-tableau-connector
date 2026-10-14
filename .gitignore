@@ -3,3 +3,4 @@ tdvt_workspace
 *.bbprojectd
 .venv
 .idea
+.claude
