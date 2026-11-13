@@ -26,3 +26,16 @@ On Windows:
 ```
 tableau.exe -DConnectPluginsPath=[CONNECTOR_LOCATION]
 ```
+
+## Testing
+
+CI smoke-tests the connection on every pull request: it evaluates the connector scripts the way Tableau does and
+uses the resulting URL and properties with the DuckDB JDBC driver, in memory and against MotherDuck. Locally:
+
+```sh
+node testing/smoke/connection.mjs memory | java -cp duckdb_jdbc.jar testing/smoke/Smoke.java
+node testing/smoke/connection.mjs motherduck sample_data "$MOTHERDUCK_TOKEN" | java -cp duckdb_jdbc.jar testing/smoke/Smoke.java
+```
+
+It doesn't cover the dialect: run the TDVT suite (`testing/config`) in Tableau Desktop before releasing a change
+to `dialect.tdd`.
